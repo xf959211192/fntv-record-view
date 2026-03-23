@@ -182,6 +182,9 @@ def get_db_connection() -> Iterator[sqlite3.Connection]:
 
 app = Flask(__name__)
 TRAKT_API_BASE = os.getenv('TRAKT_API_BASE', 'https://api.trakt.tv').rstrip('/')
+APP_VERSION = (os.getenv('APP_VERSION', 'dev') or 'dev').strip()
+APP_COMMIT_SHA = (os.getenv('APP_COMMIT_SHA', 'unknown') or 'unknown').strip()
+APP_BUILD_TIME = (os.getenv('APP_BUILD_TIME', '') or '').strip()
 TRAKT_CLIENT_ID = os.getenv('TRAKT_CLIENT_ID', '').strip()
 TRAKT_CLIENT_SECRET = os.getenv('TRAKT_CLIENT_SECRET', '').strip()
 TRAKT_REDIRECT_URI = os.getenv('TRAKT_REDIRECT_URI', 'urn:ietf:wg:oauth:2.0:oob').strip()
@@ -2311,6 +2314,16 @@ atexit.register(_stop_trakt_auto_sync_thread)
 def index():
     """主页面"""
     return render_template('index.html')
+
+@app.route('/api/meta')
+def get_app_meta():
+    """获取前端展示用的应用元信息。"""
+    return jsonify({
+        'version': APP_VERSION,
+        'commit_sha': APP_COMMIT_SHA,
+        'commit_short': APP_COMMIT_SHA[:7] if APP_COMMIT_SHA and APP_COMMIT_SHA != 'unknown' else 'unknown',
+        'build_time': APP_BUILD_TIME
+    })
 
 @app.route('/api/users')
 def get_users():

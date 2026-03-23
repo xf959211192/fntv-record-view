@@ -21,6 +21,7 @@ export const api = {
   },
 
   // Users & Stats
+  getMeta: () => api.get('/api/meta'),
   getUsers: () => api.get('/api/users'),
   getStats: () => api.get('/api/stats'),
   getPlayHistory: (params) => {

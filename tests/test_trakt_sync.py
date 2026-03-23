@@ -27,6 +27,16 @@ from main import (
 
 
 class TraktSyncTestCase(unittest.TestCase):
+    def test_get_app_meta(self):
+        with app.test_client() as client:
+            response = client.get('/api/meta')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIn('version', payload)
+        self.assertIn('commit_sha', payload)
+        self.assertIn('commit_short', payload)
+
     def test_calculate_play_progress(self):
         self.assertEqual(_calculate_play_progress(0, 30), 0.0)
         self.assertEqual(_calculate_play_progress(None, 30), 0.0)

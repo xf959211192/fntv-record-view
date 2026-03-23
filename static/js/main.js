@@ -10,6 +10,7 @@ import { initTraktPanel } from './components/TraktPanel.js';
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. Dark Mode Toggle
     initThemeToggle();
+    initVersionBadge();
 
     // 2. Setup rendering logic hooks to our state
     renderStats(document.getElementById('stats-container'));
@@ -27,7 +28,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 4. Load initial global data
     try {
-        const [users, stats, tStatus, tDash] = await Promise.all([
+        const [meta, users, stats, tStatus, tDash] = await Promise.all([
+            api.getMeta(),
             api.getUsers(),
             api.getStats(),
             api.getTraktStatus(),
@@ -35,6 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         ]);
         
         state.update({
+             meta: meta,
              users: users,
              stats: stats,
              traktStatus: tStatus,
@@ -71,4 +74,22 @@ async function fetchHistoryData() {
         console.error("Failed to fetch history:", e);
         state.update({ history: [], isHistoryLoading: false });
     }
+}
+
+function initVersionBadge() {
+    const header = document.querySelector('header.surface');
+    if (!header) return;
+
+    const badge = document.createElement('div');
+    badge.id = 'app-version';
+    badge.className = 'text-sm text-muted mt-4';
+    badge.textContent = '版本加载中...';
+    header.appendChild(badge);
+
+    state.subscribe((s) => {
+        const meta = s.meta || {};
+        const version = meta.version || 'dev';
+        const commit = meta.commit_short || 'unknown';
+        badge.textContent = `版本: ${version} (${commit})`;
+    });
 }

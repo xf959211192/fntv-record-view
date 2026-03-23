@@ -2,6 +2,7 @@
 let listeners = [];
 
 export const state = {
+  meta: { version: '', commit_short: '', build_time: '' },
   users: [],
   stats: { total_users: 0, active_users: 0, total_plays: 0, today_plays: 0 },
   history: [],
