@@ -1,164 +1,154 @@
-# 飞牛影视观看历史管理系统
+﻿# 飞牛影视观看记录与 Trakt 同步
 
-🎬 一个专为飞牛影视数据库设计的观看历史记录管理系统
+用于读取飞牛影视 `trimmedia.db`，在页面中浏览观看记录，并将电影/剧集观看历史同步到 Trakt。
 
-<img src="docs/sample-1.png" width="100%">
+![页面示例](docs/sample-1.png)
 
-## ✨ 功能特性
+## 功能概览
 
-- **现代化UI设计**：扁平化管理界面
-- **观看历史展示**：按观看时间降序显示用户观看记录
-- **用户筛选**：支持按用户筛选观看记录
-- **完整层级展示**：
-  - 自动获取完整的剧集层级信息（支持多级父子关系）
-  - 智能显示剧集标题格式（剧名 - S01E01 - 集名）
-  - 层级信息悬浮提示
-- **详细信息显示**：
-  - 播放进度条和百分比
-  - 播放时长和观看位置
-  - 剧集信息（季数、集数）
-  - 视频分辨率和类型
-  - 开始和最后播放时间
-- **统计数据**：
-  - 总用户数、活跃用户、播放记录数
-  - 今日播放次数
-- **响应式设计**：支持桌面和移动端访问
-- **只读安全**：仅读取数据库，不进行任何写入操作
+- 播放历史浏览
+  - 用户筛选、标题搜索、时间范围筛选、分页浏览
+  - 展示剧名、季集号、播放进度、分辨率、播放时间等信息
+- Trakt 设备授权
+  - 服务端保存 `Client ID`、`Client Secret`、`access_token`、`refresh_token`
+  - 前端只负责发起授权和展示验证码
+- Trakt 历史同步
+  - 支持预览同步和正式同步
+  - 电影与剧集分开匹配
+  - 剧集主路径为 `show -> season -> episode -> trakt episode id`
+  - 支持失败队列、人工指定、重新匹配、同步状态面板
+- 自动同步
+  - 默认每 30 分钟执行一次
+  - 支持选择自动同步用户，留空表示所有用户
+  - 支持“已看完或达到阈值”筛选
 
-### 🐳 Docker Compose 部署（推荐）
+## 目录说明
 
-使用 Docker Compose 可以更简单地部署和管理应用。
+- `main.py`：Flask 后端与 Trakt 同步逻辑
+- `templates/index.html`：前端页面
+- `tests/test_trakt_sync.py`：Trakt 相关单元测试
+- `database/trimmedia.db`：飞牛影视数据库挂载位置
+- `runtime/`：容器推荐的运行时目录，用于保存 Trakt token、缓存库和临时数据库副本
 
-#### 前置条件
+## 本地运行
 
-- Docker 和 Docker Compose
-- 飞牛影视数据库文件目录
-
-#### 部署步骤
-
-1. 克隆项目：
+### 1. 安装依赖
 
 ```bash
-git clone https://github.com/QiaoKes/fntv-record-view
-cd fntv-record-view
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt
 ```
 
-2. 按需修改 docker-compose.yml 中的参数：
-3. 启动服务：
+### 2. 准备数据库
+
+将飞牛影视数据库放到：
+
+```text
+database/trimmedia.db
+```
+
+### 3. 配置 `.env`
+
+```env
+TRAKT_CLIENT_ID=你的 Trakt Client ID
+TRAKT_CLIENT_SECRET=你的 Trakt Client Secret
+TRAKT_REDIRECT_URI=urn:ietf:wg:oauth:2.0:oob
+
+TRAKT_AUTO_SYNC_ENABLED=true
+TRAKT_AUTO_SYNC_INTERVAL_SECONDS=1800
+TRAKT_AUTO_SYNC_WATCHED_THRESHOLD=90
+TRAKT_AUTO_SYNC_LIMIT=1000
+```
+
+### 4. 启动服务
 
 ```bash
-docker-compose up -d
+.venv/Scripts/python main.py
 ```
 
-4. 查看运行状态：
+访问：`http://127.0.0.1:5000`
+
+## Docker 部署
+
+### 目录准备
+
+```text
+fntv-record-view/
+├─ database/
+│  └─ trimmedia.db
+├─ runtime/
+└─ .env
+```
+
+### 启动
 
 ```bash
-docker-compose ps
-docker-compose logs -f fntv-record-view
+docker compose up -d --build
 ```
 
-5. 访问应用：
-   打开浏览器访问 `http://localhost:5000`
+### 停止
 
-#### 注意事项
+```bash
+docker compose down
+```
 
-- 确保数据库目录路径正确且Docker有读取权限
-- 默认端口为5000，可在docker-compose.yml中修改
-- 确认挂载的飞牛影音数据库路径正确
+### 容器中的关键路径
 
-## 📊 界面展示
+- 只读数据库：`/app/database/trimmedia.db`
+- 运行时目录：`/app/runtime`
+  - `trakt_tokens.json`
+  - `trakt_last_sync.json`
+  - `trakt_settings.json`
+  - `trakt_sync.db`
+  - `trimmedia_tmp.db`
 
-### 主要功能区域
+### Docker 环境变量
 
-1. **统计卡片**：显示系统概览数据
-2. **筛选控件**：用户选择和显示数量设置
-3. **播放历史列表**：详细的观看记录展示
-4. **分页导航**：支持大量数据的分页浏览
+`docker-compose.yml` 已预留这些变量：
 
-### 显示信息
+- `TRAKT_CLIENT_ID`
+- `TRAKT_CLIENT_SECRET`
+- `TRAKT_REDIRECT_URI`
+- `TRAKT_AUTO_SYNC_ENABLED`
+- `TRAKT_AUTO_SYNC_INTERVAL_SECONDS`
+- `TRAKT_AUTO_SYNC_WATCHED_THRESHOLD`
+- `TRAKT_AUTO_SYNC_LIMIT`
+- `APP_RUNTIME_DIR`
 
-- 📺 媒体标题（自动识别剧集格式：剧名 - S01E01 - 集名）
-- 👤 观看用户名
-- ⏱️ 播放进度（时分秒格式 + 百分比进度条）
-- 🎬 媒体类型（电影/电视剧/动漫等）
-- 📅 开始观看时间和最后播放时间
-- 🎥 视频分辨率信息
+## GitHub Actions 镜像打包
 
-## 🔧 技术实现
+仓库已提供工作流：
 
-### 后端 (Flask)
+- `.github/workflows/build.yml`
 
-- **路由设计**：
+默认行为：
 
-  - `/` - 主页面
-  - `/api/users` - 用户列表 API
-  - `/api/stats` - 统计数据 API
-  - `/api/play_history` - 播放历史 API
-  - `/api/user_activity` - 用户活动统计 API
-- **数据处理**：
+- `push` 到 `main` 时构建并推送镜像
+- 打 `v*` 标签时构建并推送版本镜像
+- `pull_request` 仅校验构建，不推送
+- 镜像发布到 `GHCR`：`ghcr.io/<owner>/<repo>`
 
-  - 时间戳格式化
-  - 播放进度计算
-  - 递归CTE查询获取完整层级信息
-  - 缓存优化减少数据库查询
-  - 分页数据处理
-- **安全特性**：
+如果仓库是私有仓库，需要确保包权限允许读取。
 
-  - 只读模式数据库连接 (`mode=ro`)
-  - 递归深度限制防止死循环
-  - 错误处理和日志记录
+## 运行时文件说明
 
-### 🐳 容器化部署
+以下文件属于运行产物，不建议提交：
 
-- **Docker 镜像**：
+- `app.log`
+- `trimmedia_tmp.db*`
+- `trakt_tokens.json`
+- `trakt_last_sync.json`
+- `trakt_settings.json`
+- `trakt_sync.db`
+- `runtime/`
 
-  - 基于 Python 3.13-alpine 镜像构建
-  - 极简化配置，无额外系统依赖
-  - 轻量级镜像，快速启动
-- **Docker Compose 配置**：
+## 测试
 
-  - 自动重启策略
-  - 资源使用限制（内存 50M-100M，CPU 0.5-1.0）
-  - 网络隔离（桥接网络）
-  - 数据库只读挂载
-  - 日志文件持久化
+```bash
+.venv/Scripts/python -m py_compile main.py
+.venv/Scripts/python -m unittest -v tests/test_trakt_sync.py
+```
 
-### 前端 (HTML/CSS/JavaScript)
+## 许可证
 
-- **现代化CSS**：
-
-  - 渐变背景和毛玻璃效果
-  - 卡片式布局设计
-  - 响应式网格系统
-  - 平滑过渡动画
-  - 悬浮提示增强交互
-- **交互功能**：
-
-  - 异步数据加载
-  - 实时筛选和分页
-  - 加载状态显示
-  - 错误状态处理
-  - 自然页面滚动（移除内部滚动条）
-- **数据展示优化**：
-
-  - 智能层级信息显示
-  - 剧集标题格式化
-  - 进度条可视化
-  - 响应式卡片布局
-
-## 📱 移动端适配
-
-- 响应式布局自动适应不同屏幕尺寸
-- 移动端优化的交互元素
-- 触摸友好的按钮和控件
-
-## ⚠️ 注意事项
-
-- **只读模式**：应用程序仅读取数据库，不会进行任何修改
-- **数据安全**：确保数据库文件路径正确且可读
-- **性能考虑**：大量数据时建议适当调整每页显示数量
-
-## 📄 许可证
-
-本项目基于 MIT 许可证开源。
-飞牛影视媒体观看记录查看器
+本项目基于 [MIT](LICENSE) 许可证发布。

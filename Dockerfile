@@ -1,26 +1,25 @@
-# 使用更精简的 Alpine 基础镜像
-FROM python:3.13-alpine
+﻿FROM python:3.12-slim
 
-# 设置工作目录
-WORKDIR /app
-
-# 设置环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    APP_RUNTIME_DIR=/app/runtime
 
-# 复制需求文件并安装 Python 依赖
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /app
 
-# 复制应用代码
-COPY . .
+RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /home/app app
 
-# 创建数据库目录用于挂载
-RUN mkdir -p /app/database
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# 暴露端口
+COPY main.py README.md LICENSE ./
+COPY templates ./templates
+
+RUN mkdir -p /app/database /app/runtime \
+    && chown -R app:app /app
+
+USER app
+
 EXPOSE 5000
 
-# 启动命令
 CMD ["python", "main.py"]

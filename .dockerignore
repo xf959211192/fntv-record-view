@@ -1,45 +1,29 @@
-# Git
-.git
-.gitignore
-
-# Docker
-Dockerfile
-docker-compose.yml
-docker-compose.prod.yml
-.dockerignore
-nginx.conf
-Makefile
-
-# Python
+﻿.git
+.github
+.venv
 __pycache__
+.pytest_cache
+
+.env
+runtime/
+database/
+*.db
+*.db-shm
+*.db-wal
+trimmedia_tmp.db*
+trakt_tokens.json
+trakt_last_sync.json
+trakt_settings.json
+app.log
+
+/tests
+/docs
+
 *.pyc
 *.pyo
 *.pyd
-.Python
-env
-pip-log.txt
-pip-delete-this-directory.txt
-.tox
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
 *.log
-.idea
 .vscode
-
-# OS
+.idea
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# 其他临时文件
-*.tmp
-*.temp
-*~
