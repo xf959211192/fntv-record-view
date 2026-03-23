@@ -1094,26 +1094,50 @@ def _clamp_percentage(value: Any, default: int = 90) -> int:
         return default
     return max(1, min(100, number))
 
-def _calculate_play_progress(position_seconds: Any, runtime_minutes: Any) -> float:
-    """根据本地播放位置和片长计算进度百分比。"""
+def _resolve_runtime_seconds(runtime_minutes: Any, stream_duration_seconds: Any = None) -> float:
+    """优先使用视频流时长，其次回退到 item.runtime 分钟字段。"""
+    try:
+        stream_duration_value = float(stream_duration_seconds or 0)
+    except (TypeError, ValueError):
+        stream_duration_value = 0.0
+    if stream_duration_value > 0:
+        return stream_duration_value
+
     try:
         runtime_value = float(runtime_minutes or 0)
-        position_value = float(position_seconds or 0)
     except (TypeError, ValueError):
         return 0.0
 
-    if runtime_value <= 0 or position_value <= 0:
+    if runtime_value <= 0:
         return 0.0
 
     runtime_seconds = runtime_value * 60.0
     if runtime_seconds <= 0:
         return 0.0
 
+    return runtime_seconds
+
+
+def _calculate_play_progress(position_seconds: Any, runtime_minutes: Any, stream_duration_seconds: Any = None) -> float:
+    """根据本地播放位置和片长计算进度百分比。"""
+    try:
+        position_value = float(position_seconds or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+    runtime_seconds = _resolve_runtime_seconds(runtime_minutes, stream_duration_seconds)
+    if runtime_seconds <= 0 or position_value <= 0:
+        return 0.0
+
     return max(0.0, min(100.0, (position_value / runtime_seconds) * 100.0))
 
 
-def _derive_watch_state(progress: Any, position_seconds: Any = 0) -> str:
+def _derive_watch_state(progress: Any, position_seconds: Any = 0, watched: Any = 0) -> str:
     """按进度和播放位置推导观看状态。"""
+    try:
+        watched_value = int(watched or 0)
+    except (TypeError, ValueError):
+        watched_value = 0
     try:
         progress_value = float(progress or 0)
     except (TypeError, ValueError):
@@ -1123,6 +1147,8 @@ def _derive_watch_state(progress: Any, position_seconds: Any = 0) -> str:
     except (TypeError, ValueError):
         position_value = 0.0
 
+    if watched_value == 1:
+        return 'watched'
     if progress_value >= 100:
         return 'watched'
     if progress_value > 0:
@@ -1589,8 +1615,12 @@ def _build_normalized_media_items(conn: sqlite3.Connection, records: List[sqlite
 
         item_detail = _get_item_detail(conn, row['item_guid'], item_detail_cache)
         is_episode = row['season_number'] is not None and row['episode_number'] is not None
-        progress = round(_calculate_play_progress(row['position'], row['runtime_minutes']), 1)
-        watch_state = _derive_watch_state(progress, row['position'])
+        progress = round(_calculate_play_progress(
+            row['position'],
+            row['runtime_minutes'],
+            row['stream_duration_seconds']
+        ), 1)
+        watch_state = _derive_watch_state(progress, row['position'], row['watched'])
         common = {
             'item_guid': row['item_guid'],
             'user_guid': row['user_guid'],
@@ -1934,9 +1964,11 @@ def _fetch_records_for_trakt_sync(
         'iup.update_time',
         'iup.watched',
         'iup.ts AS position',
+        'iup.video_guid',
         'i.type AS item_type',
         'i.title AS item_title',
         'i.runtime AS runtime_minutes',
+        'ms.duration AS stream_duration_seconds',
         'i.season_number',
         'i.episode_number'
     ]
@@ -1958,12 +1990,26 @@ def _fetch_records_for_trakt_sync(
     if only_watched:
         where_parts.append('''
             (
-                i.runtime IS NOT NULL
-                AND i.runtime > 0
-                AND iup.ts IS NOT NULL
-                AND (CAST(iup.ts AS REAL) * 100.0 / (i.runtime * 60.0)) >= ?
+                iup.watched = 1
+                OR (
+                    iup.ts IS NOT NULL
+                    AND (
+                        (
+                            ms.duration IS NOT NULL
+                            AND ms.duration > 0
+                            AND (CAST(iup.ts AS REAL) * 100.0 / ms.duration) >= ?
+                        )
+                        OR (
+                            (ms.duration IS NULL OR ms.duration <= 0)
+                            AND i.runtime IS NOT NULL
+                            AND i.runtime > 0
+                            AND (CAST(iup.ts AS REAL) * 100.0 / (i.runtime * 60.0)) >= ?
+                        )
+                    )
+                )
             )
         ''')
+        params.append(watched_threshold)
         params.append(watched_threshold)
     if user_guid:
         where_parts.append('iup.user_guid = ?')
@@ -1975,6 +2021,7 @@ def _fetch_records_for_trakt_sync(
         SELECT {", ".join(select_parts)}
         FROM item_user_play iup
         JOIN item i ON iup.item_guid = i.guid
+        LEFT JOIN media_stream ms ON ms.guid = iup.video_guid
         WHERE {" AND ".join(where_parts)}
         ORDER BY iup.update_time DESC
         LIMIT ?
@@ -2451,6 +2498,7 @@ def get_play_history():
                 iup.item_guid,
                 iup.user_guid,
                 iup.ts AS position,
+                iup.video_guid,
                 iup.watched,
                 iup.create_time,
                 iup.update_time,
@@ -2465,10 +2513,12 @@ def get_play_history():
                 i.episode_number,
                 i.parent_guid,
                 i.runtime,
+                ms.duration AS stream_duration_seconds,
                 i.release_date
             FROM item_user_play iup
             JOIN user u ON iup.user_guid = u.guid
             JOIN item i ON iup.item_guid = i.guid
+            LEFT JOIN media_stream ms ON ms.guid = iup.video_guid
             {where_clause}
             ORDER BY iup.update_time DESC
             LIMIT ? OFFSET ?
@@ -2495,9 +2545,13 @@ def get_play_history():
             elif record['season_number'] and record['episode_number']:
                 display_title = f"S{record['season_number']:02d}E{record['episode_number']:02d} - {record['title']}"
 
-            runtime_seconds = int((record['runtime'] or 0) * 60) if record['runtime'] else 0
-            progress = round(_calculate_play_progress(record['position'], record['runtime']), 1)
-            watch_state = _derive_watch_state(progress, record['position'])
+            runtime_seconds = int(_resolve_runtime_seconds(record['runtime'], record['stream_duration_seconds']))
+            progress = round(_calculate_play_progress(
+                record['position'],
+                record['runtime'],
+                record['stream_duration_seconds']
+            ), 1)
+            watch_state = _derive_watch_state(progress, record['position'], record['watched'])
             is_episode = record['season_number'] is not None and record['episode_number'] is not None
 
             history_list.append({

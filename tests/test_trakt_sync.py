@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from main import (
     _calculate_play_progress,
+    _resolve_runtime_seconds,
     app,
     _build_trakt_dashboard,
     _build_trakt_auth_headers,
@@ -61,10 +62,19 @@ class TraktSyncTestCase(unittest.TestCase):
         self.assertEqual(_calculate_play_progress(1800, 30), 100.0)
         self.assertEqual(_calculate_play_progress(900, 30), 50.0)
         self.assertEqual(_calculate_play_progress(999999, 30), 100.0)
+        self.assertAlmostEqual(_calculate_play_progress(658, 0, 2324), (658 / 2324) * 100, places=6)
+
+    def test_resolve_runtime_seconds(self):
+        self.assertEqual(_resolve_runtime_seconds(24), 1440.0)
+        self.assertEqual(_resolve_runtime_seconds(24, 2324), 2324.0)
+        self.assertEqual(_resolve_runtime_seconds(0, 2324), 2324.0)
+        self.assertEqual(_resolve_runtime_seconds(0, 0), 0.0)
 
     def test_derive_watch_state(self):
         self.assertEqual(_derive_watch_state(0), 'unwatched')
         self.assertEqual(_derive_watch_state(0, 120), 'played')
+        self.assertEqual(_derive_watch_state(0, 0, 1), 'watched')
+        self.assertEqual(_derive_watch_state(12.5, 300, 1), 'watched')
         self.assertEqual(_derive_watch_state(12.5), 'in_progress')
         self.assertEqual(_derive_watch_state(100), 'watched')
 
