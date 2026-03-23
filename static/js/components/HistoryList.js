@@ -21,7 +21,7 @@ export function initHistoryList(containerId, paginationId, fetchPage) {
     if (!s.history || s.history.length === 0) {
       container.innerHTML = `
         <div class="p-8 text-center text-muted">
-          <div class="text-4xl opacity-50 mb-4">📭</div>
+          <div class="text-4xl opacity-50 mb-4">📥</div>
           <p>没有找到观看记录</p>
         </div>
       `;
@@ -32,15 +32,16 @@ export function initHistoryList(containerId, paginationId, fetchPage) {
     const html = s.history.map((item) => {
       const itemType = item.item_type || item.type || '';
       const isMovie = itemType === 'movie';
-      const playProgress = item.play_progress ?? item.progress ?? 0;
+      const playProgress = Number(item.play_progress ?? item.progress ?? 0);
+      const watchState = item.watch_state || (playProgress >= 100 ? 'watched' : (playProgress > 0 ? 'in_progress' : 'unwatched'));
 
       let badgeHtml = '';
-      if (item.watched) {
-        badgeHtml = '<span class="badge badge-success">已看完</span>';
-      } else if (playProgress > 90) {
-        badgeHtml = `<span class="badge badge-primary">进度 ${playProgress}%</span>`;
+      if (watchState === 'watched') {
+        badgeHtml = '<span class="badge badge-success">已观看</span>';
+      } else if (watchState === 'in_progress') {
+        badgeHtml = `<span class="badge badge-primary">进度 ${playProgress.toFixed(1)}%</span>`;
       } else {
-        badgeHtml = `<span class="badge badge-info">进度 ${playProgress}%</span>`;
+        badgeHtml = '<span class="badge badge-info">未观看</span>';
       }
 
       return `
@@ -54,7 +55,7 @@ export function initHistoryList(containerId, paginationId, fetchPage) {
             </div>
 
             <div class="progress-bar mt-3">
-              <div class="progress-fill" style="width: ${Math.min(Number(playProgress) || 0, 100)}%"></div>
+              <div class="progress-fill" style="width: ${Math.min(playProgress || 0, 100)}%"></div>
             </div>
           </div>
           <div class="item-user text-right shrink-0">

@@ -1074,6 +1074,38 @@ def _clamp_percentage(value: Any, default: int = 90) -> int:
         return default
     return max(1, min(100, number))
 
+def _calculate_play_progress(position_seconds: Any, runtime_minutes: Any) -> float:
+    """根据本地播放位置和片长计算进度百分比。"""
+    try:
+        runtime_value = float(runtime_minutes or 0)
+        position_value = float(position_seconds or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+    if runtime_value <= 0 or position_value <= 0:
+        return 0.0
+
+    runtime_seconds = runtime_value * 60.0
+    if runtime_seconds <= 0:
+        return 0.0
+
+    return max(0.0, min(100.0, (position_value / runtime_seconds) * 100.0))
+
+
+def _derive_watch_state(progress: Any) -> str:
+    """按进度推导观看状态。"""
+    try:
+        progress_value = float(progress or 0)
+    except (TypeError, ValueError):
+        progress_value = 0.0
+
+    if progress_value >= 100:
+        return 'watched'
+    if progress_value > 0:
+        return 'in_progress'
+    return 'unwatched'
+
+
 def _normalize_imdb_id(value: Any) -> Optional[str]:
     """规范化 imdb id，支持 1234567 或 tt1234567。"""
     if value is None:
@@ -1531,10 +1563,14 @@ def _build_normalized_media_items(conn: sqlite3.Connection, records: List[sqlite
 
         item_detail = _get_item_detail(conn, row['item_guid'], item_detail_cache)
         is_episode = row['season_number'] is not None and row['episode_number'] is not None
+        progress = round(_calculate_play_progress(row['position'], row['runtime_minutes']), 1)
+        watch_state = _derive_watch_state(progress)
         common = {
             'item_guid': row['item_guid'],
             'user_guid': row['user_guid'],
-            'watched': bool(row['watched']),
+            'watched': watch_state == 'watched',
+            'watch_state': watch_state,
+            'progress': progress,
             'watched_at': watched_at,
             'watched_at_display': format_timestamp(row['update_time']),
             'original_title': item_detail.get('original_title') or '',
@@ -1871,8 +1907,10 @@ def _fetch_records_for_trakt_sync(
         'iup.user_guid',
         'iup.update_time',
         'iup.watched',
+        'iup.ts AS position',
         'i.type AS item_type',
         'i.title AS item_title',
+        'i.runtime AS runtime_minutes',
         'i.season_number',
         'i.episode_number'
     ]
@@ -1894,13 +1932,10 @@ def _fetch_records_for_trakt_sync(
     if only_watched:
         where_parts.append('''
             (
-                iup.watched = 1
-                OR (
-                    i.runtime IS NOT NULL
-                    AND i.runtime > 0
-                    AND iup.ts IS NOT NULL
-                    AND (CAST(iup.ts AS REAL) * 100.0 / (i.runtime * 60.0)) >= ?
-                )
+                i.runtime IS NOT NULL
+                AND i.runtime > 0
+                AND iup.ts IS NOT NULL
+                AND (CAST(iup.ts AS REAL) * 100.0 / (i.runtime * 60.0)) >= ?
             )
         ''')
         params.append(watched_threshold)
@@ -2302,73 +2337,62 @@ def get_users():
 
 @app.route('/api/play_history')
 def get_play_history():
-    """获取播放历史记录"""
+    """获取播放历史记录。"""
     user_guid = request.args.get('user_guid', '')
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 20))
     search_title = request.args.get('search_title', '').strip()
     start_time = request.args.get('start_time', '')
     end_time = request.args.get('end_time', '')
-    
+
     with get_db_connection() as conn:
-        # 构建查询条件
         where_clause = "WHERE iup.visible = 1"
-        params = []
-        
+        params: List[Any] = []
+
         if user_guid:
             where_clause += " AND iup.user_guid = ?"
             params.append(user_guid)
-        
-        # 模糊搜索剧集名称（包括父级项目名称）
+
         if search_title:
-            # 添加调试日志
             logger.info(f"搜索关键词: {search_title}")
-            
-            # 使用 CTE 递归查询来搜索整个层级结构中的名称
             where_clause += """
                 AND EXISTS (
                     WITH RECURSIVE item_hierarchy(guid, title, original_title, parent_guid, level) AS (
-                        -- 起始项目
                         SELECT guid, title, original_title, parent_guid, 0 as level
-                        FROM item 
+                        FROM item
                         WHERE guid = i.guid
-                        
+
                         UNION ALL
-                        
-                        -- 递归查找父级
+
                         SELECT parent.guid, parent.title, parent.original_title, parent.parent_guid, ih.level + 1
                         FROM item parent
                         INNER JOIN item_hierarchy ih ON parent.guid = ih.parent_guid
                         WHERE ih.level < 10 AND parent.guid IS NOT NULL
                     )
-                    SELECT 1 FROM item_hierarchy 
+                    SELECT 1 FROM item_hierarchy
                     WHERE title LIKE ? OR original_title LIKE ?
                 )
             """
             search_param = f"%{search_title}%"
             params.extend([search_param, search_param])
             logger.debug(f"搜索参数: {search_param}")
-        
-        # 播放时间范围筛选
+
         if start_time:
             try:
-                # 解析时间格式 YYYY-MM-DD HH:MM:SS
                 start_timestamp = int(datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S').timestamp() * 1000)
                 where_clause += " AND iup.update_time >= ?"
                 params.append(start_timestamp)
             except ValueError:
                 logger.warning(f"无效的开始时间格式: {start_time}")
-        
+
         if end_time:
             try:
-                # 解析时间格式 YYYY-MM-DD HH:MM:SS
                 end_timestamp = int(datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S').timestamp() * 1000)
                 where_clause += " AND iup.update_time <= ?"
                 params.append(end_timestamp)
             except ValueError:
                 logger.warning(f"无效的结束时间格式: {end_time}")
-        
-        # 获取总数
+
         count_query = f'''
             SELECT COUNT(*) as total
             FROM item_user_play iup
@@ -2376,26 +2400,24 @@ def get_play_history():
             JOIN item i ON iup.item_guid = i.guid
             {where_clause}
         '''
-        
         total = conn.execute(count_query, params).fetchone()['total']
-        
-        # 获取播放历史数据
+
         offset = (page - 1) * per_page
         query = f'''
-            SELECT 
+            SELECT
                 iup.item_guid,
                 iup.user_guid,
-                iup.ts as position,
+                iup.ts AS position,
                 iup.watched,
                 iup.create_time,
                 iup.update_time,
-                iup.type as play_type,
+                iup.type AS play_type,
                 iup.resolution,
                 u.username,
                 i.title,
                 i.original_title,
                 i.overview,
-                i.type as item_type,
+                i.type AS item_type,
                 i.season_number,
                 i.episode_number,
                 i.parent_guid,
@@ -2408,49 +2430,33 @@ def get_play_history():
             ORDER BY iup.update_time DESC
             LIMIT ? OFFSET ?
         '''
-        
-        params.extend([per_page, offset])
-        history = conn.execute(query, params).fetchall()
-        
-        # 批量获取层级信息
-        hierarchy_cache = {}
-        history_list = []
-        
+
+        query_params = params + [per_page, offset]
+        history = conn.execute(query, query_params).fetchall()
+
+        hierarchy_cache: Dict[str, List[Dict[str, Any]]] = {}
+        history_list: List[Dict[str, Any]] = []
+
         for record in history:
-            # 获取完整的层级信息
             hierarchy = get_item_hierarchy(conn, record['item_guid'], hierarchy_cache)
-            
-            # 构建显示标题
             display_title = record['title']
-            series_info = ""
-            
-            if len(hierarchy) > 1:  # 有父级项目
-                # 找到最顶层的剧集名称（层级最高的）
-                root_item = hierarchy[-1]  # 最后一个是根项目
+            series_info = ''
+
+            if len(hierarchy) > 1:
+                root_item = hierarchy[-1]
                 series_info = root_item['title']
-                
-                # 构建完整标题
                 if record['season_number'] and record['episode_number']:
-                    # 如果有季数和集数，显示完整格式
                     display_title = f"{series_info} - S{record['season_number']:02d}E{record['episode_number']:02d} - {record['title']}"
                 elif record['title'] != series_info:
-                    # 如果集名和剧名不同，显示剧名 - 集名
                     display_title = f"{series_info} - {record['title']}"
             elif record['season_number'] and record['episode_number']:
-                # 没有层级信息但有季集数据，使用集名作为基础
                 display_title = f"S{record['season_number']:02d}E{record['episode_number']:02d} - {record['title']}"
-            
-            # 计算观看进度百分比
-            # 注意：item.runtime 是分钟，position 是秒，需要转换
-            runtime_seconds = record['runtime'] * 60 if record['runtime'] else 0
-            progress = 0
-            if runtime_seconds and record['position'] and runtime_seconds > 0:
-                # 确保进度不超过100%
-                progress = min(100, (record['position'] / runtime_seconds) * 100)
-            
-            # 判断是否为剧集
+
+            runtime_seconds = int((record['runtime'] or 0) * 60) if record['runtime'] else 0
+            progress = round(_calculate_play_progress(record['position'], record['runtime']), 1)
+            watch_state = _derive_watch_state(progress)
             is_episode = record['season_number'] is not None and record['episode_number'] is not None
-            
+
             history_list.append({
                 'item_guid': record['item_guid'],
                 'user_guid': record['user_guid'],
@@ -2468,18 +2474,19 @@ def get_play_history():
                 'position_formatted': format_duration(record['position']),
                 'runtime': runtime_seconds,
                 'runtime_formatted': format_duration(runtime_seconds),
-                'progress': round(progress, 1),
-                'watched': bool(record['watched']),  # 确保是布尔值
+                'progress': progress,
+                'watched': watch_state == 'watched',
+                'watch_state': watch_state,
                 'resolution': record['resolution'],
                 'create_time': format_timestamp(record['create_time']),
                 'update_time': format_timestamp(record['update_time']),
                 'release_date': record['release_date'],
                 'is_episode': is_episode,
                 'update_time_display': format_timestamp(record['update_time']),
-                'play_progress': round(progress, 1),
+                'play_progress': progress,
                 'app_version': record['resolution']
             })
-        
+
         return jsonify({
             'total': total,
             'page': page,
@@ -2487,7 +2494,6 @@ def get_play_history():
             'pages': (total + per_page - 1) // per_page,
             'data': history_list
         })
-
 @app.route('/api/stats')
 def get_stats():
     """获取统计数据"""

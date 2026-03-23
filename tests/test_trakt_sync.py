@@ -3,6 +3,7 @@ from contextlib import nullcontext
 from unittest.mock import patch
 
 from main import (
+    _calculate_play_progress,
     app,
     _build_trakt_dashboard,
     _build_trakt_auth_headers,
@@ -10,6 +11,7 @@ from main import (
     _build_trakt_history_payload,
     _clamp_percentage,
     _compare_titles,
+    _derive_watch_state,
     _get_trakt_show_episode,
     _get_trakt_token_expire_at,
     _match_movie_item,
@@ -25,6 +27,18 @@ from main import (
 
 
 class TraktSyncTestCase(unittest.TestCase):
+    def test_calculate_play_progress(self):
+        self.assertEqual(_calculate_play_progress(0, 30), 0.0)
+        self.assertEqual(_calculate_play_progress(None, 30), 0.0)
+        self.assertEqual(_calculate_play_progress(1800, 30), 100.0)
+        self.assertEqual(_calculate_play_progress(900, 30), 50.0)
+        self.assertEqual(_calculate_play_progress(999999, 30), 100.0)
+
+    def test_derive_watch_state(self):
+        self.assertEqual(_derive_watch_state(0), 'unwatched')
+        self.assertEqual(_derive_watch_state(12.5), 'in_progress')
+        self.assertEqual(_derive_watch_state(100), 'watched')
+
     def test_normalize_imdb_id(self):
         self.assertEqual(_normalize_imdb_id('1234567'), 'tt1234567')
         self.assertEqual(_normalize_imdb_id('tt7654321'), 'tt7654321')
