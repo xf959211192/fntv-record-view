@@ -60,6 +60,12 @@ TRAKT_AUTO_SYNC_WATCHED_THRESHOLD=90
 TRAKT_AUTO_SYNC_LIMIT=1000
 ```
 
+也可以直接复制：
+
+```bash
+cp .env.example .env
+```
+
 ### 4. 启动服务
 
 ```bash
@@ -79,6 +85,23 @@ fntv-record-view/
 ├─ runtime/
 └─ .env
 ```
+
+推荐先复制环境变量模板：
+
+```bash
+cp .env.example .env
+```
+
+然后至少填写这 3 项：
+
+- `TRAKT_CLIENT_ID`
+- `TRAKT_CLIENT_SECRET`
+- `TRAKT_REDIRECT_URI`
+
+如果你的飞牛数据库不在项目内置的 `./database`，再修改：
+
+- `SRC_DB_DIR`
+- `APP_RUNTIME_HOST_DIR`
 
 ### 启动
 
@@ -104,8 +127,12 @@ docker compose down
 
 ### Docker 环境变量
 
-`docker-compose.yml` 已预留这些变量：
+`docker-compose.yml` 当前会读取这些变量：
 
+- `APP_PORT`
+- `TZ`
+- `SRC_DB_DIR`
+- `APP_RUNTIME_HOST_DIR`
 - `TRAKT_CLIENT_ID`
 - `TRAKT_CLIENT_SECRET`
 - `TRAKT_REDIRECT_URI`
@@ -113,7 +140,50 @@ docker compose down
 - `TRAKT_AUTO_SYNC_INTERVAL_SECONDS`
 - `TRAKT_AUTO_SYNC_WATCHED_THRESHOLD`
 - `TRAKT_AUTO_SYNC_LIMIT`
-- `APP_RUNTIME_DIR`
+- `TRAKT_AUTO_SYNC_USER_GUID`
+
+其中：
+
+- `SRC_DB_DIR` 会挂载到容器内的 `/app/database`
+- `APP_RUNTIME_HOST_DIR` 会挂载到容器内的 `/app/runtime`
+- 容器内固定使用 `SRC_DB_PATH=/app/database/trimmedia.db`
+- `APP_RUNTIME_DIR` 已由容器内固定设置为 `/app/runtime`，通常不需要手工传入
+
+### Docker 使用说明
+
+1. 准备飞牛数据库文件：
+
+```text
+${SRC_DB_DIR}/trimmedia.db
+```
+
+2. 首次启动：
+
+```bash
+docker compose up -d --build
+```
+
+3. 查看日志：
+
+```bash
+docker compose logs -f
+```
+
+4. 更新代码后重建：
+
+```bash
+docker compose up -d --build
+```
+
+5. 停止并移除容器：
+
+```bash
+docker compose down
+```
+
+启动后，Trakt token、同步状态库、临时数据库副本都会写到：
+
+- `${APP_RUNTIME_HOST_DIR}`
 
 ## GitHub Actions 镜像打包
 
