@@ -27,6 +27,24 @@ from main import (
 
 
 class TraktSyncTestCase(unittest.TestCase):
+    @patch('main._refresh_database_copy')
+    def test_refresh_source_database(self, mock_refresh_database_copy):
+        mock_refresh_database_copy.return_value = {
+            'source_db_path': 'src.db',
+            'temp_db_path': 'tmp.db',
+            'copied_at': 123,
+            'copied_at_display': '2026-03-24 02:00:00'
+        }
+
+        with app.test_client() as client:
+            response = client.post('/api/db/refresh', json={})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['message'], '数据库副本已刷新')
+        self.assertEqual(payload['copied_at'], 123)
+        mock_refresh_database_copy.assert_called_once_with(force=True)
+
     def test_get_app_meta(self):
         with app.test_client() as client:
             response = client.get('/api/meta')

@@ -1,4 +1,5 @@
 import { state } from '../state.js';
+import { api } from '../api.js';
 import { debounce } from '../utils.js';
 
 export function initFilters(containerId, onSearch) {
@@ -53,6 +54,31 @@ export function initFilters(containerId, onSearch) {
 
   document.getElementById('btn-search').addEventListener('click', performImmediateSearch);
   document.getElementById('btn-clear').addEventListener('click', clearFilters);
+
+  const actionRow = container.querySelector('.flex.gap-4.mt-6');
+  if (actionRow && !document.getElementById('btn-refresh-db')) {
+    const refreshBtn = document.createElement('button');
+    refreshBtn.id = 'btn-refresh-db';
+    refreshBtn.className = 'btn btn-secondary flex-1';
+    refreshBtn.textContent = '手动读取数据库';
+    refreshBtn.addEventListener('click', async () => {
+      refreshBtn.disabled = true;
+      const originalText = refreshBtn.textContent;
+      refreshBtn.textContent = '刷新中...';
+
+      try {
+        const result = await api.refreshDatabase();
+        performImmediateSearch();
+        alert(result.message || '数据库副本已刷新');
+      } catch (error) {
+        alert(`刷新数据库失败: ${error.message}`);
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = originalText;
+      }
+    });
+    actionRow.appendChild(refreshBtn);
+  }
 
   // Subscribe to populate Users dropdown
   state.subscribe((s) => {

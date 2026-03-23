@@ -22,6 +22,7 @@ export const api = {
 
   // Users & Stats
   getMeta: () => api.get('/api/meta'),
+  refreshDatabase: () => api.post('/api/db/refresh', {}),
   getUsers: () => api.get('/api/users'),
   getStats: () => api.get('/api/stats'),
   getPlayHistory: (params) => {

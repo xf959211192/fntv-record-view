@@ -125,6 +125,23 @@ def _atomic_copy_database():
             except OSError as rm_err:
                 logger.error(f"清理临时文件 {atomic_tmp_path} 失败: {rm_err}")
 
+def _refresh_database_copy(force: bool = False) -> Dict[str, Any]:
+    """手动刷新数据库副本，供前端主动触发。"""
+    global _last_copy_time
+
+    with _db_copy_lock:
+        if force:
+            _last_copy_time = 0.0
+        _atomic_copy_database()
+
+    return {
+        'source_db_path': SRC_DB_PATH,
+        'temp_db_path': TMP_DB_PATH,
+        'copied_at': int(_last_copy_time * 1000) if _last_copy_time else 0,
+        'copied_at_display': format_timestamp(int(_last_copy_time * 1000)) if _last_copy_time else '',
+    }
+
+
 @contextmanager
 def get_db_connection() -> Iterator[sqlite3.Connection]:
     """
@@ -2324,6 +2341,13 @@ def get_app_meta():
         'commit_short': APP_COMMIT_SHA[:7] if APP_COMMIT_SHA and APP_COMMIT_SHA != 'unknown' else 'unknown',
         'build_time': APP_BUILD_TIME
     })
+
+@app.route('/api/db/refresh', methods=['POST'])
+def refresh_source_database():
+    """手动刷新数据库副本。"""
+    payload = _refresh_database_copy(force=True)
+    payload['message'] = '数据库副本已刷新'
+    return jsonify(payload)
 
 @app.route('/api/users')
 def get_users():
