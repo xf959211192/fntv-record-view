@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY main.py README.md LICENSE ./
 COPY templates ./templates
+COPY static ./static
 
 RUN mkdir -p /app/database /app/runtime \
     && chown -R app:app /app

@@ -10,6 +10,7 @@
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       APP_RUNTIME_DIR: /app/runtime
+      SRC_DB_PATH: /app/database/trimmedia.db
       TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:-}
       TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET:-}
       TRAKT_REDIRECT_URI: ${TRAKT_REDIRECT_URI:-urn:ietf:wg:oauth:2.0:oob}
@@ -18,6 +19,6 @@
       TRAKT_AUTO_SYNC_WATCHED_THRESHOLD: ${TRAKT_AUTO_SYNC_WATCHED_THRESHOLD:-90}
       TRAKT_AUTO_SYNC_LIMIT: ${TRAKT_AUTO_SYNC_LIMIT:-1000}
     volumes:
-      - /usr/local/apps/@appdata/trim.media/database:/app/database:ro
-      - ./runtime:/app/runtime
+      - ${SRC_DB_DIR:-/usr/local/apps/@appdata/trim.media/database}:/app/database:ro
+      - ${APP_RUNTIME_HOST_DIR:-./runtime}:/app/runtime
     restart: unless-stopped
