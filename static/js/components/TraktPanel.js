@@ -34,7 +34,7 @@ function renderTraktPanel(container, s) {
 
   const summary = db.summary || {};
   const onlyWatched = localStorage.getItem('trakt_only_watched') !== 'false';
-  const watchedThreshold = localStorage.getItem('trakt_watched_threshold') || 90;
+  const watchedThreshold = status.auto_sync_watched_threshold || localStorage.getItem('trakt_watched_threshold') || 90;
 
   container.innerHTML = `
     <div class="trakt-panel">
@@ -288,8 +288,13 @@ function bindTraktPanelEvents() {
   if (saveAutoBtn) {
     saveAutoBtn.addEventListener('click', async () => {
       const userGuid = document.getElementById('trakt-auto-sync-user')?.value || '';
+      const threshold = parseInt(document.getElementById('trakt-watched-threshold')?.value || '90', 10) || 90;
       try {
-        await api.updateTraktSettings({ auto_sync_user_guid: userGuid });
+        await api.updateTraktSettings({
+          auto_sync_user_guid: userGuid,
+          auto_sync_watched_threshold: threshold
+        });
+        localStorage.setItem('trakt_watched_threshold', String(threshold));
         alert('定时同步范围保存成功');
         const traktStatus = await api.getTraktStatus();
         state.update({ traktStatus });

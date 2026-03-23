@@ -21,6 +21,10 @@
   - 默认每 30 分钟执行一次
   - 支持选择自动同步用户，留空表示所有用户
   - 支持“已看完或达到阈值”筛选
+  - 同步阈值保存后会写入 `trakt_settings.json`，服务重启后仍然保留
+- 数据库读取
+  - 默认先复制源库到临时副本再读取，副本缓存时间为 60 秒
+  - 页面可手动触发“读取数据库”立即刷新副本，不必等待缓存过期
 
 ## 目录说明
 
@@ -59,6 +63,12 @@ TRAKT_AUTO_SYNC_INTERVAL_SECONDS=1800
 TRAKT_AUTO_SYNC_WATCHED_THRESHOLD=90
 TRAKT_AUTO_SYNC_LIMIT=1000
 ```
+
+说明：
+
+- `TRAKT_AUTO_SYNC_WATCHED_THRESHOLD` 是首次启动默认值
+- 之后如果你在页面里修改并保存了同步阈值，实际值会持久化到运行时目录中的 `trakt_settings.json`
+- 服务重启后会优先读取持久化值，而不是重新回到 `90`
 
 也可以直接复制：
 
@@ -124,6 +134,11 @@ docker compose down
   - `trakt_settings.json`
   - `trakt_sync.db`
   - `trimmedia_tmp.db`
+
+其中：
+
+- `trakt_settings.json` 会保存自动同步用户范围，以及“已观看阈值”等服务端设置
+- `trimmedia_tmp.db` 是源数据库的临时副本，默认缓存 60 秒
 
 ### Docker 环境变量
 
@@ -191,6 +206,10 @@ docker compose down
 启动后，Trakt token、同步状态库、临时数据库副本都会写到：
 
 - `${APP_RUNTIME_HOST_DIR}`
+
+如果你在页面里修改了 Trakt 自动同步阈值或自动同步用户范围，这些设置也会写到：
+
+- `${APP_RUNTIME_HOST_DIR}/trakt_settings.json`
 
 ## GitHub Actions 镜像打包
 

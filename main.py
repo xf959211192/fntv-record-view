@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+﻿from flask import Flask, render_template, request, jsonify
 import json
 import logging
 import os
@@ -297,7 +297,8 @@ def _normalize_trakt_auto_sync_user_guid(value: Any) -> str:
 def _load_trakt_settings() -> Dict[str, Any]:
     """读取 Trakt 服务端设置。"""
     default_settings = {
-        'auto_sync_user_guid': TRAKT_AUTO_SYNC_USER_GUID
+        'auto_sync_user_guid': TRAKT_AUTO_SYNC_USER_GUID,
+        'auto_sync_watched_threshold': TRAKT_AUTO_SYNC_WATCHED_THRESHOLD
     }
 
     with _trakt_settings_lock:
@@ -315,6 +316,10 @@ def _load_trakt_settings() -> Dict[str, Any]:
     return {
         'auto_sync_user_guid': _normalize_trakt_auto_sync_user_guid(
             data.get('auto_sync_user_guid', TRAKT_AUTO_SYNC_USER_GUID)
+        ),
+        'auto_sync_watched_threshold': _clamp_percentage(
+            data.get('auto_sync_watched_threshold', TRAKT_AUTO_SYNC_WATCHED_THRESHOLD),
+            default=TRAKT_AUTO_SYNC_WATCHED_THRESHOLD
         )
     }
 
@@ -324,11 +329,24 @@ def _save_trakt_settings(data: Dict[str, Any]) -> Dict[str, Any]:
     normalized = {
         'auto_sync_user_guid': _normalize_trakt_auto_sync_user_guid(
             data.get('auto_sync_user_guid', TRAKT_AUTO_SYNC_USER_GUID)
+        ),
+        'auto_sync_watched_threshold': _clamp_percentage(
+            data.get('auto_sync_watched_threshold', TRAKT_AUTO_SYNC_WATCHED_THRESHOLD),
+            default=TRAKT_AUTO_SYNC_WATCHED_THRESHOLD
         )
     }
     with _trakt_settings_lock:
         _atomic_write_json(TRAKT_SETTINGS_PATH, normalized)
     return normalized
+
+
+def _get_trakt_auto_sync_watched_threshold() -> int:
+    """获取持久化后的自动同步已观看阈值。"""
+    settings = _load_trakt_settings()
+    return _clamp_percentage(
+        settings.get('auto_sync_watched_threshold', TRAKT_AUTO_SYNC_WATCHED_THRESHOLD),
+        default=TRAKT_AUTO_SYNC_WATCHED_THRESHOLD
+    )
 
 
 def _get_sync_user_info(user_guid: str) -> Optional[Dict[str, Any]]:
@@ -864,6 +882,7 @@ def _build_trakt_status() -> Dict[str, Any]:
     expire_at = _get_trakt_token_expire_at(token_data)
     now_ts = int(time.time())
     auto_sync_scope = _build_trakt_auto_sync_scope()
+    watched_threshold = _get_trakt_auto_sync_watched_threshold()
 
     return {
         'configured': _is_trakt_configured(),
@@ -874,7 +893,7 @@ def _build_trakt_status() -> Dict[str, Any]:
         'has_refresh_token': bool(refresh_token),
         'auto_sync_enabled': TRAKT_AUTO_SYNC_ENABLED,
         'auto_sync_interval_seconds': TRAKT_AUTO_SYNC_INTERVAL_SECONDS,
-        'auto_sync_watched_threshold': TRAKT_AUTO_SYNC_WATCHED_THRESHOLD,
+        'auto_sync_watched_threshold': watched_threshold,
         'auto_sync_limit': TRAKT_AUTO_SYNC_LIMIT,
         **auto_sync_scope,
         'last_sync': _load_trakt_last_sync()
@@ -2297,10 +2316,11 @@ def _execute_trakt_sync(user_guid: str, dry_run: bool, only_watched: bool, watch
 def _trakt_auto_sync_worker() -> None:
     """按固定间隔执行 Trakt 自动同步。"""
     auto_sync_scope = _build_trakt_auto_sync_scope()
+    watched_threshold = _get_trakt_auto_sync_watched_threshold()
     logger.info(
         'Trakt 自动同步线程已启动：间隔=%s秒，阈值=%s%%，limit=%s，范围=%s',
         TRAKT_AUTO_SYNC_INTERVAL_SECONDS,
-        TRAKT_AUTO_SYNC_WATCHED_THRESHOLD,
+        watched_threshold,
         TRAKT_AUTO_SYNC_LIMIT,
         auto_sync_scope['auto_sync_user_display']
     )
@@ -2308,11 +2328,12 @@ def _trakt_auto_sync_worker() -> None:
     while not _trakt_auto_sync_stop_event.wait(TRAKT_AUTO_SYNC_INTERVAL_SECONDS):
         try:
             auto_sync_scope = _build_trakt_auto_sync_scope()
+            watched_threshold = _get_trakt_auto_sync_watched_threshold()
             status_code, payload = _execute_trakt_sync(
                 user_guid=auto_sync_scope['auto_sync_user_guid'],
                 dry_run=False,
                 only_watched=True,
-                watched_threshold=TRAKT_AUTO_SYNC_WATCHED_THRESHOLD,
+                watched_threshold=watched_threshold,
                 limit=TRAKT_AUTO_SYNC_LIMIT,
                 source='auto'
             )
@@ -2686,12 +2707,17 @@ def save_trakt_settings():
     """保存 Trakt 服务端设置。"""
     data = request.get_json(silent=True) or {}
     auto_sync_user_guid = _normalize_trakt_auto_sync_user_guid(data.get('auto_sync_user_guid'))
+    auto_sync_watched_threshold = _clamp_percentage(
+        data.get('auto_sync_watched_threshold', TRAKT_AUTO_SYNC_WATCHED_THRESHOLD),
+        default=TRAKT_AUTO_SYNC_WATCHED_THRESHOLD
+    )
 
     if auto_sync_user_guid and not _get_sync_user_info(auto_sync_user_guid):
         return jsonify({'error': '自动同步用户不存在或已停用'}), 400
 
     _save_trakt_settings({
-        'auto_sync_user_guid': auto_sync_user_guid
+        'auto_sync_user_guid': auto_sync_user_guid,
+        'auto_sync_watched_threshold': auto_sync_watched_threshold
     })
     return jsonify({
         'message': '定时同步用户已保存',
