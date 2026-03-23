@@ -64,6 +64,7 @@ class TraktSyncTestCase(unittest.TestCase):
 
     def test_derive_watch_state(self):
         self.assertEqual(_derive_watch_state(0), 'unwatched')
+        self.assertEqual(_derive_watch_state(0, 120), 'played')
         self.assertEqual(_derive_watch_state(12.5), 'in_progress')
         self.assertEqual(_derive_watch_state(100), 'watched')
 

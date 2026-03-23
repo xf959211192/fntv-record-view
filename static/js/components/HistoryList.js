@@ -21,7 +21,7 @@ export function initHistoryList(containerId, paginationId, fetchPage) {
     if (!s.history || s.history.length === 0) {
       container.innerHTML = `
         <div class="p-8 text-center text-muted">
-          <div class="text-4xl opacity-50 mb-4">📥</div>
+          <div class="text-4xl opacity-50 mb-4">📜</div>
           <p>没有找到观看记录</p>
         </div>
       `;
@@ -33,13 +33,22 @@ export function initHistoryList(containerId, paginationId, fetchPage) {
       const itemType = item.item_type || item.type || '';
       const isMovie = itemType === 'movie';
       const playProgress = Number(item.play_progress ?? item.progress ?? 0);
-      const watchState = item.watch_state || (playProgress >= 100 ? 'watched' : (playProgress > 0 ? 'in_progress' : 'unwatched'));
+      const hasPosition = Number(item.position || 0) > 0;
+      const watchState = item.watch_state || (
+        playProgress >= 100 ? 'watched' : (
+          playProgress > 0 ? 'in_progress' : (
+            hasPosition ? 'played' : 'unwatched'
+          )
+        )
+      );
 
       let badgeHtml = '';
       if (watchState === 'watched') {
         badgeHtml = '<span class="badge badge-success">已观看</span>';
       } else if (watchState === 'in_progress') {
         badgeHtml = `<span class="badge badge-primary">进度 ${playProgress.toFixed(1)}%</span>`;
+      } else if (watchState === 'played') {
+        badgeHtml = '<span class="badge badge-warning">已播放</span>';
       } else {
         badgeHtml = '<span class="badge badge-info">未观看</span>';
       }

@@ -1112,17 +1112,23 @@ def _calculate_play_progress(position_seconds: Any, runtime_minutes: Any) -> flo
     return max(0.0, min(100.0, (position_value / runtime_seconds) * 100.0))
 
 
-def _derive_watch_state(progress: Any) -> str:
-    """按进度推导观看状态。"""
+def _derive_watch_state(progress: Any, position_seconds: Any = 0) -> str:
+    """按进度和播放位置推导观看状态。"""
     try:
         progress_value = float(progress or 0)
     except (TypeError, ValueError):
         progress_value = 0.0
+    try:
+        position_value = float(position_seconds or 0)
+    except (TypeError, ValueError):
+        position_value = 0.0
 
     if progress_value >= 100:
         return 'watched'
     if progress_value > 0:
         return 'in_progress'
+    if position_value > 0:
+        return 'played'
     return 'unwatched'
 
 
@@ -1584,7 +1590,7 @@ def _build_normalized_media_items(conn: sqlite3.Connection, records: List[sqlite
         item_detail = _get_item_detail(conn, row['item_guid'], item_detail_cache)
         is_episode = row['season_number'] is not None and row['episode_number'] is not None
         progress = round(_calculate_play_progress(row['position'], row['runtime_minutes']), 1)
-        watch_state = _derive_watch_state(progress)
+        watch_state = _derive_watch_state(progress, row['position'])
         common = {
             'item_guid': row['item_guid'],
             'user_guid': row['user_guid'],
@@ -2491,7 +2497,7 @@ def get_play_history():
 
             runtime_seconds = int((record['runtime'] or 0) * 60) if record['runtime'] else 0
             progress = round(_calculate_play_progress(record['position'], record['runtime']), 1)
-            watch_state = _derive_watch_state(progress)
+            watch_state = _derive_watch_state(progress, record['position'])
             is_episode = record['season_number'] is not None and record['episode_number'] is not None
 
             history_list.append({
