@@ -98,15 +98,15 @@ cp .env.example .env
 - `TRAKT_CLIENT_SECRET`
 - `TRAKT_REDIRECT_URI`
 
-如果你的飞牛数据库不在项目内置的 `./database`，再修改：
+如果你的飞牛数据库不在项目内置的 `./database/trimmedia.db`，再修改：
 
-- `SRC_DB_DIR`
+- `SRC_DB_FILE`
 - `APP_RUNTIME_HOST_DIR`
 
 ### 启动
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 ### 停止
@@ -131,7 +131,7 @@ docker compose down
 
 - `APP_PORT`
 - `TZ`
-- `SRC_DB_DIR`
+- `SRC_DB_FILE`
 - `APP_RUNTIME_HOST_DIR`
 - `TRAKT_CLIENT_ID`
 - `TRAKT_CLIENT_SECRET`
@@ -144,38 +144,45 @@ docker compose down
 
 其中：
 
-- `SRC_DB_DIR` 会挂载到容器内的 `/app/database`
+- `SRC_DB_FILE` 会挂载到容器内的 `/app/database/trimmedia.db`
 - `APP_RUNTIME_HOST_DIR` 会挂载到容器内的 `/app/runtime`
 - 容器内固定使用 `SRC_DB_PATH=/app/database/trimmedia.db`
 - `APP_RUNTIME_DIR` 已由容器内固定设置为 `/app/runtime`，通常不需要手工传入
 
 ### Docker 使用说明
 
-1. 准备飞牛数据库文件：
-
-```text
-${SRC_DB_DIR}/trimmedia.db
-```
-
-2. 首次启动：
+1. 拉取最新镜像：
 
 ```bash
-docker compose up -d --build
+docker pull ghcr.io/xf959211192/fntv-record-view:latest
 ```
 
-3. 查看日志：
+2. 准备飞牛数据库文件：
+
+```text
+${SRC_DB_FILE}
+```
+
+3. 首次启动：
+
+```bash
+docker compose up -d
+```
+
+4. 查看日志：
 
 ```bash
 docker compose logs -f
 ```
 
-4. 更新代码后重建：
+5. 更新镜像后重新拉取并启动：
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-5. 停止并移除容器：
+6. 停止并移除容器：
 
 ```bash
 docker compose down
@@ -196,7 +203,7 @@ docker compose down
 - `push` 到 `main` 时构建并推送镜像
 - 打 `v*` 标签时构建并推送版本镜像
 - `pull_request` 仅校验构建，不推送
-- 镜像发布到 `GHCR`：`ghcr.io/<owner>/<repo>`
+- 镜像发布到 `GHCR`：`ghcr.io/<owner>/<repo>:latest`
 
 如果仓库是私有仓库，需要确保包权限允许读取。
 

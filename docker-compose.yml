@@ -1,9 +1,7 @@
-﻿services:
+services:
   fntv-record-view:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: fntv-record-view:latest
+    image: ghcr.io/xf959211192/fntv-record-view:latest
+    pull_policy: always
     container_name: fntv-record-view
     ports:
       - "${APP_PORT:-5000}:5000"
@@ -18,7 +16,8 @@
       TRAKT_AUTO_SYNC_INTERVAL_SECONDS: ${TRAKT_AUTO_SYNC_INTERVAL_SECONDS:-1800}
       TRAKT_AUTO_SYNC_WATCHED_THRESHOLD: ${TRAKT_AUTO_SYNC_WATCHED_THRESHOLD:-90}
       TRAKT_AUTO_SYNC_LIMIT: ${TRAKT_AUTO_SYNC_LIMIT:-1000}
+      TRAKT_AUTO_SYNC_USER_GUID: ${TRAKT_AUTO_SYNC_USER_GUID:-}
     volumes:
-      - ${SRC_DB_DIR:-/usr/local/apps/@appdata/trim.media/database}:/app/database:ro
+      - ${SRC_DB_FILE:-./database/trimmedia.db}:/app/database/trimmedia.db:ro
       - ${APP_RUNTIME_HOST_DIR:-./runtime}:/app/runtime
     restart: unless-stopped
